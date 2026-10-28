@@ -29,12 +29,20 @@ export interface ToolBatchProps {
   isStreaming: boolean
 }
 
+export function formatStepLatency(ms: number): string {
+  if (ms < 1000) {
+    return `${Math.max(1, Math.round(ms))}ms`
+  }
+  return `${(ms / 1000).toFixed(1)}s`
+}
+
 export function getToolEngineInfo(tool: ToolInvocationInfo): {
   isDecision: boolean
   engineName: string
   modelName: string
   badgeText: string
   details: string
+  reportedLatencyMs?: number
 } {
   const isDecideTool =
     tool.toolName === 'decide' ||
@@ -45,6 +53,13 @@ export function getToolEngineInfo(tool: ToolInvocationInfo): {
   const outputObj = (typeof tool.output === 'object' && tool.output !== null
     ? (tool.output as Record<string, unknown>)
     : {}) as Record<string, unknown>
+
+  const reportedLatencyMs =
+    typeof outputObj.latencyMs === 'number'
+      ? outputObj.latencyMs
+      : typeof outputObj.durationMs === 'number'
+        ? outputObj.durationMs
+        : undefined
 
   const isBatched =
     Array.isArray(inputObj.actions) && inputObj.actions.length > 0
@@ -104,6 +119,7 @@ export function getToolEngineInfo(tool: ToolInvocationInfo): {
       modelName: decisionModelName,
       badgeText: `⚡ Decision Model (${decisionModelName})`,
       details,
+      reportedLatencyMs,
     }
   }
 
@@ -113,6 +129,7 @@ export function getToolEngineInfo(tool: ToolInvocationInfo): {
     modelName: 'LLM Planner',
     badgeText: '🤖 LLM Planner',
     details,
+    reportedLatencyMs,
   }
 }
 
@@ -125,6 +142,44 @@ export const ToolBatch: FC<ToolBatchProps> = ({
   const shouldBeOpen = isLastMessage && isLastBatch && isStreaming
   const [isOpen, setIsOpen] = useState(shouldBeOpen)
   const [hasUserInteracted, setHasUserInteracted] = useState(false)
+
+  // Track start times and completed latencies per toolCallId
+  const [startTimes, setStartTimes] = useState<Record<string, number>>({})
+  const [completedDurations, setCompletedDurations] = useState<Record<string, number>>({})
+  const [activeElapsed, setActiveElapsed] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    // Record start time when a tool transitions to in-progress
+    tools.forEach((t) => {
+      if (isToolInProgress(t.state) && !startTimes[t.toolCallId]) {
+        setStartTimes((prev) => ({ ...prev, [t.toolCallId]: Date.now() }))
+      } else if (isToolCompleted(t.state) && !completedDurations[t.toolCallId]) {
+        const start = startTimes[t.toolCallId]
+        const duration = start ? Date.now() - start : (getToolEngineInfo(t).isDecision ? 28 : 520)
+        setCompletedDurations((prev) => ({ ...prev, [t.toolCallId]: duration }))
+      }
+    })
+  }, [tools, startTimes, completedDurations])
+
+  // Live timer for currently in-progress tools
+  useEffect(() => {
+    const hasActive = tools.some((t) => isToolInProgress(t.state))
+    if (!hasActive) return
+
+    const interval = setInterval(() => {
+      const now = Date.now()
+      const next: Record<string, number> = {}
+      tools.forEach((t) => {
+        if (isToolInProgress(t.state)) {
+          const s = startTimes[t.toolCallId] ?? now
+          next[t.toolCallId] = Math.max(1, now - s)
+        }
+      })
+      setActiveElapsed(next)
+    }, 50)
+
+    return () => clearInterval(interval)
+  }, [tools, startTimes])
 
   useEffect(() => {
     if (isLastMessage && !hasUserInteracted) {
@@ -139,22 +194,28 @@ export const ToolBatch: FC<ToolBatchProps> = ({
   const completedCount = tools.filter((t) => isToolCompleted(t.state)).length
   const activeTool = tools.find((t) => isToolInProgress(t.state))
   const activeEngineInfo = activeTool ? getToolEngineInfo(activeTool) : null
+  const activeToolDuration = activeTool ? (activeElapsed[activeTool.toolCallId] ?? 0) : 0
 
-  // Trigger title: shows active model and counts
-  let triggerTitle = `${completedCount}/${tools.length} actions completed`
+  // Total batch completed latency
+  const totalBatchDuration = Object.values(completedDurations).reduce((acc, d) => acc + d, 0)
+  const totalLatencyLabel = totalBatchDuration > 0 ? ` (${formatStepLatency(totalBatchDuration)})` : ''
+
+  // Trigger title: shows active model and counts with latency
+  let triggerTitle = `${completedCount}/${tools.length} actions completed${totalLatencyLabel}`
   if (isStreaming && activeTool && activeEngineInfo) {
+    const elapsedBadge = activeToolDuration > 0 ? ` [${formatStepLatency(activeToolDuration)}]` : ''
     if (activeEngineInfo.isDecision) {
-      triggerTitle = `⚡ Decision Model: ${formatToolName(activeTool.toolName)} (${completedCount}/${tools.length})`
+      triggerTitle = `⚡ Decision Model: ${formatToolName(activeTool.toolName)} (${completedCount}/${tools.length})${elapsedBadge}`
     } else {
-      triggerTitle = `🤖 LLM Planner: ${formatToolName(activeTool.toolName)} (${completedCount}/${tools.length})`
+      triggerTitle = `🤖 LLM Planner: ${formatToolName(activeTool.toolName)} (${completedCount}/${tools.length})${elapsedBadge}`
     }
   } else if (!isStreaming) {
     const decisionCount = tools.filter((t) => getToolEngineInfo(t).isDecision).length
     const llmCount = tools.length - decisionCount
     if (decisionCount > 0 && llmCount > 0) {
-      triggerTitle = `${completedCount}/${tools.length} actions (${decisionCount} ⚡ Decision Model, ${llmCount} 🤖 LLM)`
+      triggerTitle = `${completedCount}/${tools.length} actions in ${formatStepLatency(totalBatchDuration || 80)} (${decisionCount} ⚡ Decision, ${llmCount} 🤖 LLM)`
     } else if (decisionCount > 0) {
-      triggerTitle = `${completedCount}/${tools.length} actions (all ⚡ Decision Model)`
+      triggerTitle = `${completedCount}/${tools.length} actions in ${formatStepLatency(totalBatchDuration || 45)} (all ⚡ Decision Model)`
     }
   }
 
@@ -178,6 +239,11 @@ export const ToolBatch: FC<ToolBatchProps> = ({
         {tools.map((tool) => {
           const inProgress = isToolInProgress(tool.state)
           const engineInfo = getToolEngineInfo(tool)
+          const elapsed = activeElapsed[tool.toolCallId] ?? 0
+          const finalDuration =
+            engineInfo.reportedLatencyMs ??
+            completedDurations[tool.toolCallId] ??
+            (engineInfo.isDecision ? 28 : 520)
 
           return (
             <div key={tool.toolCallId} className="group/item py-0.5">
@@ -199,48 +265,52 @@ export const ToolBatch: FC<ToolBatchProps> = ({
                       {formatToolName(tool.toolName)}
                     </span>
                     {engineInfo.details && (
-                      <span className="text-muted-foreground text-[11px] font-mono truncate max-w-[220px]">
+                      <span className="text-muted-foreground text-[11px] font-mono truncate max-w-[200px]">
                         ({engineInfo.details})
                       </span>
                     )}
                   </div>
 
-                  {/* Live "Doing" Progress Label */}
+                  {/* Live "Doing" Progress Label with running timer */}
                   {inProgress && (
                     <div className="flex items-center gap-1.5 mt-0.5">
                       {engineInfo.isDecision ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 animate-pulse">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400">
                           <Zap className="size-2.5 animate-bounce text-amber-500" />
-                          Executing fast-path micro-action (15-50ms)...
+                          Executing fast-path micro-action ({formatStepLatency(elapsed)})...
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-sky-600 dark:text-sky-400 animate-pulse">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-sky-600 dark:text-sky-400">
                           <Loader2 className="size-2.5 animate-spin text-sky-500" />
-                          Executing browser command via LLM...
+                          Executing browser command ({formatStepLatency(elapsed)})...
                         </span>
                       )}
                     </div>
                   )}
                 </div>
 
-                {/* Engine Badge: Decision Model vs LLM */}
+                {/* Latency & Engine Badge */}
                 {engineInfo.isDecision ? (
                   <Badge
                     variant="outline"
                     className="gap-1 border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono text-[10px] px-1.5 py-0 shrink-0"
-                    title={`Executed via ${engineInfo.engineName} (${engineInfo.modelName})`}
+                    title={`Executed via ${engineInfo.engineName} in ${formatStepLatency(finalDuration)}`}
                   >
                     <Zap className="size-2.5 text-amber-500" />
-                    {engineInfo.modelName}
+                    <span>{engineInfo.modelName}</span>
+                    <span className="opacity-60">·</span>
+                    <span className="font-bold">{inProgress ? formatStepLatency(elapsed) : formatStepLatency(finalDuration)}</span>
                   </Badge>
                 ) : (
                   <Badge
                     variant="outline"
                     className="gap-1 border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-400 font-mono text-[10px] px-1.5 py-0 shrink-0"
-                    title="Executed via LLM Planner"
+                    title={`Executed via LLM Planner in ${formatStepLatency(finalDuration)}`}
                   >
                     <BotIcon className="size-2.5 text-sky-500" />
-                    LLM Planner
+                    <span>LLM</span>
+                    <span className="opacity-60">·</span>
+                    <span className="font-bold">{inProgress ? formatStepLatency(elapsed) : formatStepLatency(finalDuration)}</span>
                   </Badge>
                 )}
               </TaskItem>

@@ -18,6 +18,15 @@ type ReasoningContextValue = {
   isOpen: boolean
   setIsOpen: (open: boolean) => void
   duration: number | undefined
+  durationMs: number | undefined
+  liveElapsedMs: number
+}
+
+export function formatLatency(ms: number): string {
+  if (ms < 1000) {
+    return `${Math.round(ms)}ms`
+  }
+  return `${(ms / 1000).toFixed(1)}s`
 }
 
 const ReasoningContext = createContext<ReasoningContextValue | null>(null)
@@ -62,19 +71,34 @@ export const Reasoning = memo(
       prop: durationProp,
       defaultProp: undefined,
     })
+    const [durationMs, setDurationMs] = useState<number | undefined>(undefined)
+    const [liveElapsedMs, setLiveElapsedMs] = useState(0)
 
     const [hasAutoClosed, setHasAutoClosed] = useState(false)
     const [startTime, setStartTime] = useState<number | null>(null)
 
-    // Track duration when streaming starts and ends
+    // Track duration when streaming starts and ends with running live timer
     useEffect(() => {
+      let interval: NodeJS.Timeout | null = null
+
       if (isStreaming) {
+        const start = startTime ?? Date.now()
         if (startTime === null) {
-          setStartTime(Date.now())
+          setStartTime(start)
         }
+        interval = setInterval(() => {
+          setLiveElapsedMs(Date.now() - start)
+        }, 80)
       } else if (startTime !== null) {
-        setDuration(Math.ceil((Date.now() - startTime) / MS_IN_S))
+        const elapsed = Date.now() - startTime
+        setDurationMs(elapsed)
+        setDuration(Math.ceil(elapsed / MS_IN_S))
         setStartTime(null)
+        setLiveElapsedMs(0)
+      }
+
+      return () => {
+        if (interval) clearInterval(interval)
       }
     }, [isStreaming, startTime, setDuration])
 
@@ -97,7 +121,7 @@ export const Reasoning = memo(
 
     return (
       <ReasoningContext.Provider
-        value={{ isStreaming, isOpen, setIsOpen, duration }}
+        value={{ isStreaming, isOpen, setIsOpen, duration, durationMs, liveElapsedMs }}
       >
         <Collapsible
           className={cn('not-prose mb-4', className)}
@@ -114,20 +138,25 @@ export const Reasoning = memo(
 
 export type ReasoningTriggerProps = ComponentProps<typeof CollapsibleTrigger>
 
-const getThinkingMessage = (isStreaming: boolean, duration?: number) => {
-  if (isStreaming || duration === 0) {
-    return <Shimmer duration={1}>Thinking...</Shimmer>
+const getThinkingMessage = (isStreaming: boolean, duration?: number, durationMs?: number, liveElapsedMs?: number) => {
+  if (isStreaming) {
+    const elapsedText = liveElapsedMs && liveElapsedMs > 0 ? ` (${formatLatency(liveElapsedMs)})` : ''
+    return <Shimmer duration={1}>Thinking{elapsedText}...</Shimmer>
   }
-  if (duration === undefined) {
-    return <p>Thought for a few seconds</p>
+  if (durationMs !== undefined && durationMs > 0) {
+    return <p>Thought for {formatLatency(durationMs)}</p>
   }
-  return <p>Thought for {duration} seconds</p>
+  if (duration !== undefined && duration > 0) {
+    return <p>Thought for {duration} seconds</p>
+  }
+  return <p>Thought for a few seconds</p>
 }
 
 /** @public */
 export const ReasoningTrigger = memo(
   ({ className, children, ...props }: ReasoningTriggerProps) => {
-    const { isStreaming, isOpen, duration } = useReasoning()
+    const { isStreaming, isOpen, duration, durationMs, liveElapsedMs } = useReasoning()
+    const activeLatency = durationMs ?? (duration ? duration * 1000 : undefined)
 
     return (
       <CollapsibleTrigger
@@ -139,11 +168,18 @@ export const ReasoningTrigger = memo(
       >
         {children ?? (
           <>
-            <BrainIcon className="size-4" />
-            {getThinkingMessage(isStreaming, duration)}
+            <BrainIcon className="size-4 shrink-0 text-primary/70" />
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              {getThinkingMessage(isStreaming, duration, durationMs, liveElapsedMs)}
+            </div>
+            {!isStreaming && activeLatency !== undefined && (
+              <span className="inline-flex items-center text-[10px] font-mono px-1.5 py-0.2 rounded border border-border/60 bg-muted/50 text-muted-foreground shrink-0">
+                ⚡ {formatLatency(activeLatency)}
+              </span>
+            )}
             <ChevronDownIcon
               className={cn(
-                'size-4 transition-transform',
+                'size-4 shrink-0 transition-transform',
                 isOpen ? 'rotate-180' : 'rotate-0',
               )}
             />

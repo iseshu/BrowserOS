@@ -291,7 +291,7 @@ describe('browser tool structured contract', () => {
         navigate: ['page', 'url'],
         snapshot: ['contentLength', 'page', 'tokenEstimate', 'writtenToFile'],
         diff: ['added', 'changed', 'removed'],
-        act: ['changed', 'kind'],
+        act: ['changed', 'engine', 'kind'],
         download: ['filename', 'page', 'path', 'ref'],
         upload: ['files', 'page', 'ref', 'uploaded'],
         read: ['contentLength', 'format', 'page', 'writtenToFile'],

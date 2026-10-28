@@ -1,12 +1,14 @@
 import type { FC } from 'react'
 import { HashRouter, Route, Routes } from 'react-router'
 import { ChatLayout } from '@/components/layout/ChatLayout'
+import { UpdateModal } from '@/components/updater/UpdateModal'
 import { ChatHistory } from '@/screens/sidepanel/history/ChatHistory'
 import { Chat } from '@/screens/sidepanel/index/Chat'
 
 export const App: FC = () => {
   return (
     <HashRouter>
+      <UpdateModal />
       <Routes>
         <Route element={<ChatLayout />}>
           <Route index element={<Chat />} />

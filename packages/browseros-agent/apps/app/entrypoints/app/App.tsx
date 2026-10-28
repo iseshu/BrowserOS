@@ -3,6 +3,7 @@ import type { FC } from 'react'
 import { HashRouter, Navigate, Route, Routes, useParams } from 'react-router'
 import { SettingsSidebarLayout } from '@/components/layout/SettingsSidebarLayout'
 import { SidebarLayout } from '@/components/layout/SidebarLayout'
+import { UpdateModal } from '@/components/updater/UpdateModal'
 import { AgentCommandHome } from '@/screens/agent-command/AgentCommandHome'
 import { AISettingsPage } from '@/screens/ai-settings/AISettingsPage'
 import { ConnectMCP } from '@/screens/connect-mcp/ConnectMCP'
@@ -55,6 +56,7 @@ export const App: FC = () => {
 
   return (
     <HashRouter>
+      <UpdateModal />
       <Routes>
         <Route element={<SidebarLayout />}>
           <Route path="home" element={<NewTabLayout />}>

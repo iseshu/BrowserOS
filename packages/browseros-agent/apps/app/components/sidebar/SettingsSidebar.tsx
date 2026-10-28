@@ -8,15 +8,20 @@ import {
   Globe,
   MessageSquare,
   Palette,
+  RotateCw,
   Server,
   Zap,
 } from 'lucide-react'
 import type { FC } from 'react'
+import { useState } from 'react'
 import { NavLink } from 'react-router'
 import { ThemeToggle } from '@/components/elements/theme-toggle'
+import { Button } from '@/components/ui/button'
+import { UpdateModal } from '@/components/updater/UpdateModal'
 import type { Feature } from '@/lib/browseros/capabilities'
 import { cn } from '@/lib/utils'
 import { useCapabilities } from '@/modules/browseros/capabilities.hooks'
+import { CURRENT_SUPERCHARGED_VERSION } from '@/modules/updater/update-checker'
 
 type BaseNavItem = {
   name: string
@@ -105,6 +110,7 @@ const helpItems: NavItem[] = [
 
 export const SettingsSidebar: FC = () => {
   const { supports } = useCapabilities()
+  const [showUpdateModal, setShowUpdateModal] = useState(false)
 
   const filteredSections = primarySettingsSections
     .map((section) => ({
@@ -184,7 +190,34 @@ export const SettingsSidebar: FC = () => {
             {filteredHelpItems.map(renderNavItem)}
           </nav>
         </div>
+
+        {/* Supercharged Version & Auto-Updater Trigger */}
+        <div className="mt-4 p-2.5 rounded-lg border border-border/60 bg-muted/30">
+          <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground mb-2">
+            <span className="flex items-center gap-1 font-semibold text-foreground">
+              <Zap className="size-3 text-amber-500 fill-amber-500" />
+              Supercharged
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted/80 border border-border/50">
+              {CURRENT_SUPERCHARGED_VERSION}
+            </span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowUpdateModal(true)}
+            className="w-full text-xs gap-1.5 h-8 border-border/70 hover:bg-sidebar-accent font-medium"
+          >
+            <RotateCw className="size-3 text-primary" />
+            Check for Updates
+          </Button>
+        </div>
       </div>
+
+      <UpdateModal
+        forceOpen={showUpdateModal}
+        onClose={() => setShowUpdateModal(false)}
+      />
     </div>
   )
 }
