@@ -81,3 +81,28 @@ export interface LlmProvidersBackup {
   defaultProviderId: string
   providers: LlmProviderConfig[]
 }
+
+/** Decision model provider type */
+export type DecisionModelType = 'custom' | 'jev' | 'cloudflare-clef'
+
+/**
+ * Configuration for Decision Models (System One API: Jev, Clef, Custom Decision API)
+ * @public
+ */
+export interface DecisionProviderConfig {
+  enabled: boolean
+  id: string
+  type: DecisionModelType
+  name: string
+  baseUrl?: string
+  modelId: string
+  apiKey?: string
+  headers?: Record<string, string>
+  confidenceThreshold: number
+  cacheEnabled: boolean
+  batchingEnabled: boolean
+  hasApiKey?: boolean
+  createdAt: number
+  updatedAt: number
+}
+

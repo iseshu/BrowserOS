@@ -1,3 +1,4 @@
+import { createDecisionRoutes } from './decision'
 import { createDiagnosticsRoute } from './diagnostics'
 /**
  * @license
@@ -129,6 +130,7 @@ export function createApiRoutes(deps: CreateApiRoutesDeps) {
       // so they belong here too.
       .use('/providers/*', requireTrustedAppOrigin())
       .use('/test-provider/*', requireTrustedAppOrigin())
+      .use('/test-decision-provider/*', requireTrustedAppOrigin())
       .use('/refine-prompt/*', requireTrustedAppOrigin())
       .use('/scheduled-jobs/*', requireTrustedAppOrigin())
       .use('/scheduled-job-runs/*', requireTrustedAppOrigin())
@@ -137,6 +139,7 @@ export function createApiRoutes(deps: CreateApiRoutesDeps) {
       .route('/conversations', createConversationRoutes())
       .route('/providers', createProvidersRoutes())
       .route('/test-provider', createProviderRoutes({ browserosId }))
+      .route('/test-decision-provider', createDecisionRoutes())
       .route('/refine-prompt', createRefinePromptRoutes({ browserosId }))
       .route('/scheduled-jobs', createScheduledJobRoutes())
       .route('/scheduled-job-runs', createScheduledJobRunRoutes())

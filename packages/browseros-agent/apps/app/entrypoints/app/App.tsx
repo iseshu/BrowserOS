@@ -7,10 +7,13 @@ import { AgentCommandHome } from '@/screens/agent-command/AgentCommandHome'
 import { AISettingsPage } from '@/screens/ai-settings/AISettingsPage'
 import { ConnectMCP } from '@/screens/connect-mcp/ConnectMCP'
 import { CustomizationPage } from '@/screens/customization/CustomizationPage'
+import { DecisionSettingsPage } from '@/screens/decision-settings/DecisionSettingsPage'
+import { SavingsDashboardPage } from '@/screens/savings-dashboard/SavingsDashboardPage'
 import { FeaturesPage } from '@/screens/features/Features'
 import { SurveyPage } from '@/screens/jtbd-agent/SurveyPage'
 import { LlmHubPage } from '@/screens/llm-hub/LlmHubPage'
 import { MCPSettingsPage } from '@/screens/mcp-settings/MCPSettingsPage'
+import { NetworkTrafficPage } from '@/screens/network-panel/NetworkTrafficPage'
 import { NewTabChat } from '@/screens/newtab/index/NewTabChat'
 import { NewTabLayout } from '@/screens/newtab/layout/NewTabLayout'
 import { Personalize } from '@/screens/newtab/personalize/Personalize'
@@ -32,6 +35,9 @@ const OptionsRedirect: FC = () => {
   const routeMap: Record<string, string> = {
     ai: '/settings/ai',
     chat: '/settings/chat',
+    decision: '/settings/decision',
+    savings: '/settings/savings',
+    network: '/settings/network',
     'connect-mcp': '/connect-apps',
     mcp: '/settings/mcp',
     customization: '/settings/customization',
@@ -66,6 +72,9 @@ export const App: FC = () => {
             <Route index element={<Navigate to="/settings/ai" replace />} />
             <Route path="ai" element={<AISettingsPage key="ai" />} />
             <Route path="chat" element={<LlmHubPage />} />
+            <Route path="decision" element={<DecisionSettingsPage />} />
+            <Route path="savings" element={<SavingsDashboardPage />} />
+            <Route path="network" element={<NetworkTrafficPage />} />
             <Route path="mcp" element={<MCPSettingsPage />} />
             <Route path="customization" element={<CustomizationPage />} />
             <Route path="diagnostics" element={<DiagnosticsPage />} />

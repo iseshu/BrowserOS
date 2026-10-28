@@ -245,6 +245,15 @@ export class PageManager {
     this.hooks.onPageDetached?.(pageId)
   }
 
+  async activate(pageId: number): Promise<void> {
+    const info = this.pages.get(pageId)
+    if (!info) throw new Error(`Unknown page ${pageId}.`)
+    await this.cdp.Target.activateTarget({ targetId: info.targetId })
+    if (info.windowId !== undefined) {
+      await this.cdp.Browser.activateWindow({ windowId: info.windowId }).catch(() => {})
+    }
+  }
+
   async move(
     pageId: number,
     opts?: { windowId?: number; index?: number },

@@ -75,3 +75,68 @@ describe('act diff control (#2700)', () => {
     expect(text).not.toContain('DIFF_BODY_MARKER')
   })
 })
+
+describe('act batch actions (#2037)', () => {
+  it('executes a batch of actions sequentially with a single diff readback', async () => {
+    const executed: string[] = []
+    const session = {
+      input: () => ({
+        focus: async () => {
+          executed.push('focus')
+        },
+        type: async (text: string) => {
+          executed.push(`type:${text}`)
+        },
+        press: async (key: string) => {
+          executed.push(`press:${key}`)
+        },
+      }),
+      observe: () => ({ diff: async () => DIFF }),
+      pages: { getInfo: () => ({ url: 'https://example.com/act' }) },
+    } as unknown as BrowserSession
+
+    const result = await executeTool(
+      act,
+      {
+        page: 0,
+        actions: [
+          { kind: 'focus', ref: 'e1' },
+          { kind: 'type', text: 'shoes' },
+          { kind: 'press', key: 'Enter' },
+        ],
+      },
+      { session },
+    )
+
+    const text = textOf(result)
+    expect(text).toContain('ok (batch 3 actions: focus, type, press)')
+    expect(text).toContain('[Page 0 diff]')
+    expect(executed).toEqual(['focus', 'type:shoes', 'press:Enter'])
+  })
+
+  it('stops at the first failed action and reports error with step index', async () => {
+    const session = {
+      input: () => ({
+        focus: async () => {},
+      }),
+      observe: () => ({ diff: async () => DIFF }),
+      pages: { getInfo: () => ({ url: 'https://example.com/act' }) },
+    } as unknown as BrowserSession
+
+    // Second action missing required text
+    const result = await executeTool(
+      act,
+      {
+        page: 0,
+        actions: [
+          { kind: 'focus', ref: 'e1' },
+          { kind: 'type' }, // missing text
+        ],
+      },
+      { session },
+    )
+
+    const text = textOf(result)
+    expect(text).toContain('act[1] type:')
+  })
+})

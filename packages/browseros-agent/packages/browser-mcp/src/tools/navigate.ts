@@ -35,6 +35,37 @@ export const navigate = defineTool({
         break
     }
 
+    // Autonomous Cookie Consent Blaster:
+    // Auto-dismiss OneTrust, Cookiebot, and GDPR consent overlays to keep automation unblocked
+    try {
+      await ctx.session.evaluate(
+        args.page,
+        `(function() {
+          var selectors = [
+            '#onetrust-accept-btn-handler',
+            '#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll',
+            '#accept-recommended-btn-handler',
+            '[aria-label*="cookie" i] button[id*="accept" i]',
+            '[id*="cookie" i] button[id*="accept" i]',
+            'button#accept-all',
+            'button[data-testid*="cookie-policy-manage-dialog-accept-button"]',
+            '.cc-btn.cc-allow',
+            '#didomi-notice-agree-button'
+          ];
+          for (var i = 0; i < selectors.length; i++) {
+            var btn = document.querySelector(selectors[i]);
+            if (btn && btn.offsetParent !== null) {
+              btn.click();
+              return true;
+            }
+          }
+          return false;
+        })()`,
+      )
+    } catch {
+      // best-effort
+    }
+
     const refreshed = await ctx.session.pages.refresh(args.page)
     const origin =
       refreshed?.url ?? ctx.session.pages.getInfo(args.page)?.url ?? 'unknown'

@@ -76,7 +76,8 @@ function getExecution(
   let execution = `<execution>
 Work end-to-end: act, then report; don't delegate ("I found the button, you click it") or ask permission for routine steps. Attempt tasks even when the outcome is uncertain; for a genuinely ambiguous request, ask one targeted clarifying question.
 
-Observe → act → verify: snapshot to get refs before acting, read the \`act\` diff to confirm the effect, and re-snapshot after navigation.`
+Observe → act → verify: snapshot to get refs before acting, read the \`act\` diff to confirm the effect, and re-snapshot after navigation.
+Batching & Decision Models: For multi-step interactions (e.g. typing and clicking submit, or filling several fields), prefer passing \`actions: [...]\` to \`act\` to execute the sequence in one fast turn (#2037). Use the \`decide\` tool for rapid candidate element selection and micro-decisions in 15-50ms.`
 
   if (isNewTab) {
     execution += `

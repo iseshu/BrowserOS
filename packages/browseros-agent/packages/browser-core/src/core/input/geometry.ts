@@ -45,6 +45,56 @@ export async function getElementCenter(
   return { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 }
 }
 
+export async function highlightElement(
+  session: ProtocolApi,
+  backendNodeId: number,
+  color = '#f59e0b',
+): Promise<void> {
+  try {
+    await callOnElement(
+      session,
+      backendNodeId,
+      `function(c) {
+        try {
+          var r = this.getBoundingClientRect();
+          if (!r || r.width === 0 || r.height === 0) return;
+          var box = document.createElement('div');
+          box.id = 'browseros-spotlight-' + Math.random().toString(36).slice(2, 7);
+          box.style.position = 'fixed';
+          box.style.left = (r.left - 4) + 'px';
+          box.style.top = (r.top - 4) + 'px';
+          box.style.width = (r.width + 8) + 'px';
+          box.style.height = (r.height + 8) + 'px';
+          box.style.border = '2px solid ' + c;
+          box.style.borderRadius = '6px';
+          box.style.boxShadow = '0 0 14px ' + c + ', inset 0 0 8px ' + c;
+          box.style.pointerEvents = 'none';
+          box.style.zIndex = '2147483645';
+          box.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+          box.style.transform = 'scale(1.03)';
+          
+          var cursor = document.createElement('div');
+          cursor.style.position = 'absolute';
+          cursor.style.left = '-10px';
+          cursor.style.top = '-10px';
+          cursor.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="' + c + '"><path d="M3 3l7 18 3-7 7-3L3 3z"/></svg>';
+          box.appendChild(cursor);
+
+          document.documentElement.appendChild(box);
+          setTimeout(function() {
+            box.style.opacity = '0';
+            box.style.transform = 'scale(0.96)';
+            setTimeout(function() { if (box.parentNode) box.parentNode.removeChild(box); }, 250);
+          }, 350);
+        } catch(e) {}
+      }`,
+      [color],
+    )
+  } catch {
+    // best-effort visual highlight
+  }
+}
+
 export async function scrollIntoView(
   session: ProtocolApi,
   backendNodeId: number,

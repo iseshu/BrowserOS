@@ -6,6 +6,7 @@ import {
   focusElement,
   getElementCenter,
   getInputValue,
+  highlightElement,
   jsClick,
   scrollIntoView,
 } from './geometry'
@@ -112,6 +113,7 @@ export class Input {
     opts: ClickOptions = {},
   ): Promise<{ x: number; y: number } | undefined> {
     await scrollIntoView(session, backendNodeId)
+    await highlightElement(session, backendNodeId, '#f59e0b')
     try {
       const { x, y } = await getElementCenter(session, backendNodeId)
       await dispatchClick(
@@ -179,6 +181,7 @@ export class Input {
     opts: { clear?: boolean } = {},
   ): Promise<{ x: number; y: number } | undefined> {
     await scrollIntoView(session, backendNodeId)
+    await highlightElement(session, backendNodeId, '#38bdf8')
 
     // A real click is the most reliable way to focus shadow-DOM/custom inputs.
     let coords: { x: number; y: number } | undefined

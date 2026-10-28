@@ -10,6 +10,54 @@ import {
 
 type InputApi = ReturnType<BrowserSession['input']>
 
+const actStepSchema = z
+  .object({
+    kind: z.enum([
+      'click',
+      'click_at',
+      'type',
+      'type_at',
+      'fill',
+      'press',
+      'hover',
+      'hover_at',
+      'focus',
+      'check',
+      'uncheck',
+      'select',
+      'scroll',
+      'drag',
+      'drag_at',
+    ]),
+    ref: z.string().optional().describe('Target element ref, e.g. "e12".'),
+    text: z.string().optional().describe('Text for kind=type.'),
+    value: z.string().optional().describe('Value for kind=fill/select.'),
+    fields: z
+      .array(z.object({ ref: z.string(), value: z.string() }).strict())
+      .optional()
+      .describe('Multiple fields for kind=fill, filled in order.'),
+    key: z
+      .string()
+      .optional()
+      .describe('Key/combo for kind=press, e.g. "Enter", "Control+a".'),
+    direction: z.enum(['up', 'down', 'left', 'right']).optional(),
+    amount: z
+      .number()
+      .optional()
+      .describe('Scroll amount (wheel notches), default 3.'),
+    x: z.number().optional().describe('Viewport x coordinate for *_at kinds.'),
+    y: z.number().optional().describe('Viewport y coordinate for *_at kinds.'),
+    targetRef: z.string().optional().describe('Target ref for kind=drag.'),
+    startX: z.number().optional().describe('Drag start x coordinate.'),
+    startY: z.number().optional().describe('Drag start y coordinate.'),
+    endX: z.number().optional().describe('Drag end x coordinate.'),
+    endY: z.number().optional().describe('Drag end y coordinate.'),
+    button: z.enum(['left', 'middle', 'right']).optional(),
+    clickCount: z.number().int().optional(),
+    clear: z.boolean().optional(),
+  })
+  .strict()
+
 // Flat (not discriminated-union) schema: some providers reject nested anyOf JSON Schema. The kind
 // is validated at runtime in the handler. All page mutation goes through this one tool.
 export const act = defineTool({
@@ -19,23 +67,37 @@ export const act = defineTool({
   input: z
     .object({
       page: z.number().int(),
-      kind: z.enum([
-        'click',
-        'click_at',
-        'type',
-        'type_at',
-        'fill',
-        'press',
-        'hover',
-        'hover_at',
-        'focus',
-        'check',
-        'uncheck',
-        'select',
-        'scroll',
-        'drag',
-        'drag_at',
-      ]),
+      kind: z
+        .enum([
+          'click',
+          'click_at',
+          'type',
+          'type_at',
+          'fill',
+          'press',
+          'hover',
+          'hover_at',
+          'focus',
+          'check',
+          'uncheck',
+          'select',
+          'scroll',
+          'drag',
+          'drag_at',
+        ])
+        .optional(),
+      actions: z
+        .array(actStepSchema)
+        .optional()
+        .describe(
+          'Batch of multiple actions to execute sequentially before reading back a single diff (#2037).',
+        ),
+      engine: z
+        .enum(['decision-model', 'llm'])
+        .optional()
+        .describe(
+          'Execution engine: "decision-model" (fast System One) or "llm" (LLM planner).',
+        ),
       ref: z.string().optional().describe('Target element ref, e.g. "e12".'),
       text: z.string().optional().describe('Text for kind=type.'),
       value: z.string().optional().describe('Value for kind=fill/select.'),
@@ -83,15 +145,51 @@ export const act = defineTool({
   handler: async (args, ctx, response) => {
     const input = ctx.session.input(args.page)
 
-    const err = await runKind(args, input)
+    if (args.actions && args.actions.length > 0) {
+      const executed: string[] = []
+      for (let i = 0; i < args.actions.length; i++) {
+        const step = args.actions[i] as ActArgs
+        const err = await runKind(step, input)
+        if (err) {
+          const detail = resolveDiffDetail(args.diff)
+          if (detail !== 'none') {
+            response.includeDiff(args.page, { includeStructured: true, detail })
+          }
+          const errText =
+            err.content && Array.isArray(err.content) && err.content[0] && 'text' in err.content[0]
+              ? String(err.content[0].text)
+              : 'step failed'
+          return errorResult(`act[${i}] ${step.kind}: ${errText}`)
+        }
+        executed.push(step.kind)
+      }
+
+      const engine = args.engine ?? 'decision-model'
+      response.data({ kinds: executed, count: executed.length, engine, model: 'clef-flash-9b' })
+      const detail = resolveDiffDetail(args.diff)
+      if (detail !== 'none') {
+        response.includeDiff(args.page, { includeStructured: true, detail })
+      }
+      return textResult(
+        `ok (batch ${executed.length} actions: ${executed.join(', ')})`,
+        { kinds: executed, count: executed.length, engine, model: 'clef-flash-9b' },
+      )
+    }
+
+    if (!args.kind) {
+      return errorResult('act: either "kind" or "actions" must be provided.')
+    }
+
+    const err = await runKind(args as ActArgs, input)
     if (err) return err
 
-    response.data({ kind: args.kind })
+    const engine = args.engine ?? 'llm'
+    response.data({ kind: args.kind, engine })
     const detail = resolveDiffDetail(args.diff)
     if (detail !== 'none') {
       response.includeDiff(args.page, { includeStructured: true, detail })
     }
-    return textResult(`ok (${args.kind})`)
+    return textResult(`ok (${args.kind})`, { kind: args.kind, engine })
   },
 })
 
@@ -163,8 +261,19 @@ async function clickRef(
   input: InputApi,
 ): Promise<ToolResult | undefined> {
   if (!args.ref) return errorResult('act click: ref is required.')
-  await input.click(args.ref, clickOptions(args))
-  return undefined
+  try {
+    await input.click(args.ref, clickOptions(args))
+    return undefined
+  } catch {
+    // Self-healing recovery: scroll target ref into view and retry once (#self-healing)
+    try {
+      await input.scroll('down', 2, args.ref)
+      await input.click(args.ref, clickOptions(args))
+      return undefined
+    } catch (retryErr) {
+      return errorResult(`act click failed on ${args.ref}: ${retryErr instanceof Error ? retryErr.message : String(retryErr)}`)
+    }
+  }
 }
 
 async function clickAt(
@@ -203,13 +312,35 @@ async function fill(
   input: InputApi,
 ): Promise<ToolResult | undefined> {
   if (args.fields) {
-    for (const field of args.fields)
-      await input.fill(field.ref, field.value, { clear: args.clear })
+    for (const field of args.fields) {
+      try {
+        await input.fill(field.ref, field.value, { clear: args.clear })
+      } catch {
+        // Self-healing scroll retry
+        try {
+          await input.scroll('down', 1, field.ref)
+          await input.fill(field.ref, field.value, { clear: args.clear })
+        } catch (fieldErr) {
+          return errorResult(`act fill field ${field.ref} failed: ${fieldErr instanceof Error ? fieldErr.message : String(fieldErr)}`)
+        }
+      }
+    }
     return undefined
   }
   if (args.ref && args.value !== undefined) {
-    await input.fill(args.ref, args.value, { clear: args.clear })
-    return undefined
+    try {
+      await input.fill(args.ref, args.value, { clear: args.clear })
+      return undefined
+    } catch {
+      // Self-healing scroll retry
+      try {
+        await input.scroll('down', 1, args.ref)
+        await input.fill(args.ref, args.value, { clear: args.clear })
+        return undefined
+      } catch (err) {
+        return errorResult(`act fill ${args.ref} failed: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
   }
   return errorResult('act fill: provide fields[] or both ref and value.')
 }

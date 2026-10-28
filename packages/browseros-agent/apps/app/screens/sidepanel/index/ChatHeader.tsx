@@ -5,6 +5,7 @@ import {
   History,
   Plus,
   SettingsIcon,
+  Zap,
 } from 'lucide-react'
 import type { FC } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
@@ -78,6 +79,15 @@ export const ChatHeader: FC<ChatHeaderProps> = ({
             <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
           </button>
         </ChatProviderSelector>
+
+        <Link
+          to="/settings/decision"
+          className="inline-flex items-center gap-1 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-600 dark:text-amber-400 transition-colors hover:bg-amber-500/20"
+          title="Decision Model (Fast-Path Actions) - Click to configure"
+        >
+          <Zap className="h-3.5 w-3.5 text-amber-500" />
+          <span className="hidden sm:inline font-mono text-[11px] font-semibold">⚡ Decision Model</span>
+        </Link>
       </div>
 
       <div className="flex items-center gap-1">

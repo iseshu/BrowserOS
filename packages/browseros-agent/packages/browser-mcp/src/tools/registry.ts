@@ -1,11 +1,14 @@
 import { act } from './act'
+import { decide } from './decide'
 import { diff } from './diff'
 import { download } from './download'
 import { evaluate } from './evaluate'
+import { extract } from './extract'
 import type { ToolDefinition } from './framework'
 import { grep } from './grep'
 import { history } from './history'
 import { navigate } from './navigate'
+import { network } from './network'
 import { pdf } from './pdf'
 import { read } from './read'
 import { run } from './run'
@@ -25,6 +28,8 @@ export const BROWSER_TOOLS: readonly ToolDefinition[] = [
   snapshot,
   diff,
   act,
+  decide,
+  network,
   download,
   upload,
   read,
@@ -34,5 +39,6 @@ export const BROWSER_TOOLS: readonly ToolDefinition[] = [
   wait,
   windows,
   evaluate,
+  extract,
   run,
 ]

@@ -2,12 +2,14 @@
 
 import type { ToolUIPart } from 'ai'
 import {
+  BotIcon,
   CheckCircleIcon,
   ChevronDownIcon,
   CircleIcon,
   ClockIcon,
   WrenchIcon,
   XCircleIcon,
+  Zap,
 } from 'lucide-react'
 import type { ComponentProps, ReactNode } from 'react'
 import { isValidElement } from 'react'
@@ -73,24 +75,44 @@ export const ToolHeader = ({
   type,
   state,
   ...props
-}: ToolHeaderProps) => (
-  <CollapsibleTrigger
-    className={cn(
-      'flex w-full items-center justify-between gap-4 p-3',
-      className,
-    )}
-    {...props}
-  >
-    <div className="flex items-center gap-2">
-      <WrenchIcon className="size-4 text-muted-foreground" />
-      <span className="font-medium text-sm">
-        {title ?? type.split('-').slice(1).join('-')}
-      </span>
-      {getStatusBadge(state)}
-    </div>
-    <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-  </CollapsibleTrigger>
-)
+}: ToolHeaderProps) => {
+  const toolName = (title ?? type.split('-').slice(1).join('-')).toLowerCase()
+  const isDecision = toolName.includes('decide') || toolName.includes('clef') || toolName.includes('jev')
+
+  return (
+    <CollapsibleTrigger
+      className={cn(
+        'flex w-full items-center justify-between gap-4 p-3',
+        className,
+      )}
+      {...props}
+    >
+      <div className="flex items-center gap-2">
+        {isDecision ? (
+          <Zap className="size-4 text-amber-500" />
+        ) : (
+          <WrenchIcon className="size-4 text-muted-foreground" />
+        )}
+        <span className="font-medium text-sm">
+          {title ?? type.split('-').slice(1).join('-')}
+        </span>
+        {isDecision ? (
+          <Badge variant="outline" className="gap-1 border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 font-mono text-[10px] px-1.5 py-0">
+            <Zap className="size-2.5 text-amber-500" />
+            Decision Model
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="gap-1 border-sky-500/40 bg-sky-500/10 text-sky-600 dark:text-sky-400 font-mono text-[10px] px-1.5 py-0">
+            <BotIcon className="size-2.5 text-sky-500" />
+            LLM
+          </Badge>
+        )}
+        {getStatusBadge(state)}
+      </div>
+      <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+    </CollapsibleTrigger>
+  )
+}
 
 export type ToolContentProps = ComponentProps<typeof CollapsibleContent>
 

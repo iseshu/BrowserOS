@@ -4,9 +4,12 @@ import {
   BookOpen,
   Bot,
   Compass,
+  DollarSign,
+  Globe,
   MessageSquare,
   Palette,
   Server,
+  Zap,
 } from 'lucide-react'
 import type { FC } from 'react'
 import { NavLink } from 'react-router'
@@ -64,11 +67,26 @@ const primarySettingsSections: NavSection[] = [
         to: '/settings/chat',
         icon: MessageSquare,
       },
+      {
+        name: 'Decision Models (Jev / Clef)',
+        to: '/settings/decision',
+        icon: Zap,
+      },
+      {
+        name: 'Cost & Token Savings',
+        to: '/settings/savings',
+        icon: DollarSign,
+      },
     ],
   },
   {
     label: 'Other',
     items: [
+      {
+        name: 'Network & Interception',
+        to: '/settings/network',
+        icon: Globe,
+      },
       {
         name: 'Customize BrowserOS',
         to: '/settings/customization',

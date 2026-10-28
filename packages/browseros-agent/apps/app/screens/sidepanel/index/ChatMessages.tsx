@@ -1,6 +1,7 @@
 import type { UIMessage } from 'ai'
-import { Bot } from 'lucide-react'
+import { Bot, Loader2, Zap } from 'lucide-react'
 import { type FC, Fragment } from 'react'
+import { Badge } from '@/components/ui/badge'
 import {
   Conversation,
   ConversationContent,
@@ -22,7 +23,7 @@ import { ConnectAppCard } from './ConnectAppCard'
 import { getMessageSegments } from './getMessageSegments'
 import { JtbdPopup } from './JtbdPopup'
 import { ScheduleSuggestionCard } from './ScheduleSuggestionCard'
-import { ToolBatch } from './ToolBatch'
+import { getToolEngineInfo, ToolBatch } from './ToolBatch'
 import { UserActionMessage } from './UserActionMessage'
 
 export interface ChatMessagesProps {
@@ -163,18 +164,83 @@ export const ChatMessages: FC<ChatMessagesProps> = ({
         <ConversationScrollButton />
       </Conversation>
 
-      {isStreaming && (
-        <div className="flex animate-fadeInUp gap-2 px-3">
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent-orange)] text-white">
-            <Bot className="h-3.5 w-3.5" />
+      {isStreaming && (() => {
+        const lastMessage = messages[messages.length - 1]
+        const lastSegments = lastMessage ? getMessageSegments(lastMessage, true, isStreaming) : []
+        const lastSegment = lastSegments[lastSegments.length - 1]
+        const runningTool =
+          lastSegment?.type === 'tool-batch'
+            ? lastSegment.tools.find(
+                (t) => t.state === 'call' || t.state === 'input-available',
+              )
+            : null
+        const runningEngineInfo = runningTool ? getToolEngineInfo(runningTool) : null
+
+        if (runningEngineInfo?.isDecision) {
+          return (
+            <div className="flex animate-fadeInUp items-center gap-2 px-3 py-1">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500 text-white shadow-xs">
+                <Zap className="h-3.5 w-3.5 animate-bounce" />
+              </div>
+              <div className="flex flex-1 items-center justify-between gap-2 rounded-xl rounded-tl-none border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs shadow-xs">
+                <div className="flex items-center gap-1.5 truncate">
+                  <span className="font-bold text-amber-600 dark:text-amber-400">⚡ Decision Model:</span>
+                  <span className="text-foreground truncate">
+                    Executing fast micro-action ({runningEngineInfo.modelName})...
+                  </span>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="shrink-0 border-amber-500/40 font-mono text-[9px] text-amber-600 dark:text-amber-400"
+                >
+                  Fast-Path ⚡
+                </Badge>
+              </div>
+            </div>
+          )
+        }
+
+        if (runningTool) {
+          return (
+            <div className="flex animate-fadeInUp items-center gap-2 px-3 py-1">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-500 text-white shadow-xs">
+                <Bot className="h-3.5 w-3.5" />
+              </div>
+              <div className="flex flex-1 items-center justify-between gap-2 rounded-xl rounded-tl-none border border-sky-500/40 bg-sky-500/10 px-3 py-2 text-xs shadow-xs">
+                <div className="flex items-center gap-1.5 truncate">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-500 shrink-0" />
+                  <span className="font-bold text-sky-600 dark:text-sky-400">🤖 LLM Planner:</span>
+                  <span className="text-foreground truncate">
+                    Executing {runningTool.toolName}...
+                  </span>
+                </div>
+                <Badge
+                  variant="outline"
+                  className="shrink-0 border-sky-500/40 font-mono text-[9px] text-sky-600 dark:text-sky-400"
+                >
+                  LLM Tool
+                </Badge>
+              </div>
+            </div>
+          )
+        }
+
+        return (
+          <div className="flex animate-fadeInUp items-center gap-2 px-3 py-1">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--accent-orange)] text-white shadow-xs">
+              <Bot className="h-3.5 w-3.5" />
+            </div>
+            <div className="flex items-center gap-2 rounded-xl rounded-tl-none border border-border/50 bg-card px-3 py-2 text-xs shadow-xs">
+              <span className="font-medium text-foreground">🤖 LLM Planner Reasoning...</span>
+              <div className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-orange)] [animation-delay:-0.3s]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-orange)] [animation-delay:-0.15s]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-orange)]" />
+              </div>
+            </div>
           </div>
-          <div className="flex items-center gap-1 rounded-xl rounded-tl-none border border-border/50 bg-card px-3 py-2.5 shadow-sm">
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-orange)] [animation-delay:-0.3s]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-orange)] [animation-delay:-0.15s]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--accent-orange)]" />
-          </div>
-        </div>
-      )}
+        )
+      })()}
       <div />
     </>
   )

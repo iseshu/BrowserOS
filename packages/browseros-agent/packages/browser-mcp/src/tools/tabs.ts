@@ -4,10 +4,12 @@ import { defineTool, errorResult, textResult } from './framework'
 export const tabs = defineTool({
   name: 'tabs',
   description:
-    'Manage browser tabs. `list` returns every open page, `active` shows the current front page, `new` opens a fresh page, and `close` closes a page. When a task would disrupt a tab the user is actively using, prefer cloning it: copy its URL from `list` into `tabs new`, then work in the new page.',
+    'Manage browser tabs. `list` returns every open page, `active` shows the current front page, `new` opens a fresh page, `close` closes a page, and `activate` unhides and brings a page to front to prevent background timer throttling. When a task would disrupt a tab the user is actively using, prefer cloning it: copy its URL from `list` into `tabs new`, then work in the new page.',
   input: z
     .object({
-      action: z.enum(['list', 'active', 'new', 'close']).default('list'),
+      action: z
+        .enum(['list', 'active', 'new', 'close', 'activate'])
+        .default('list'),
       url: z
         .string()
         .optional()
@@ -16,7 +18,11 @@ export const tabs = defineTool({
         .boolean()
         .default(true)
         .describe('Open without stealing focus for action="new".'),
-      page: z.number().int().optional().describe('Page id for action="close".'),
+      page: z
+        .number()
+        .int()
+        .optional()
+        .describe('Page id for action="close" or action="activate".'),
     })
     .strict(),
   annotations: {
@@ -64,6 +70,13 @@ export const tabs = defineTool({
         }
         await ctx.session.pages.close(args.page)
         return textResult(`closed page ${args.page}`, { page: args.page })
+      }
+      case 'activate': {
+        if (args.page === undefined) {
+          return errorResult('tabs activate: page is required.')
+        }
+        await ctx.session.pages.activate(args.page)
+        return textResult(`activated page ${args.page}`, { page: args.page })
       }
       default:
         return errorResult('tabs: unsupported action.')
