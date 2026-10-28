@@ -90,8 +90,7 @@ export function getToolEngineInfo(tool: ToolInvocationInfo): {
     isDecideTool ||
     inputEngine === 'decision-model' ||
     outputEngine === 'decision-model' ||
-    isBatched ||
-    (isDecisionConfigEnabled && tool.toolName === 'act'),
+    isBatched,
   )
 
   // Subtitle details

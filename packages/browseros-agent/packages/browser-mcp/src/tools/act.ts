@@ -63,7 +63,7 @@ const actStepSchema = z
 export const act = defineTool({
   name: 'act',
   description:
-    'Act on the page using refs from the last snapshot. kinds: click, type (into focused element), fill (one field via ref+value, or many via fields[]), press (a key/combo), hover, focus, check, uncheck, select (an option value), scroll, drag. Prefer the ref-based kinds; use the coordinate kinds (click_at/type_at/hover_at/drag_at) only when the target is not in the snapshot. Reads back a diff of what changed (control its size with the diff param) - re-snapshot if you need fresh refs. If a click or fill fails, scroll the target into view and retry once. Never type credentials into a page you navigated to yourself; only into pages the user already opened or explicitly directed you to.',
+    'Act on the page using refs from the last snapshot. kinds: click, type (into focused element), fill (one field via ref+value, or many via fields[]), press (a key/combo), hover, focus, check, uncheck, select (an option value), scroll, drag. Prefer the ref-based kinds; use the coordinate kinds (click_at/type_at/hover_at/drag_at) only when the target is not in the snapshot. HIGH SPEED BATCHING: To avoid 5-10s multi-turn latency, always batch multiple sequential actions into `actions: [...]` with `diff: "summary"` instead of calling `act` turn-by-turn. Reads back a diff of what changed (control its size with the diff param) - re-snapshot if you need fresh refs. If a click or fill fails, scroll the target into view and retry once. Never type credentials into a page you navigated to yourself; only into pages the user already opened or explicitly directed you to.',
   input: z
     .object({
       page: z.number().int(),
