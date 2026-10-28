@@ -83,7 +83,13 @@ export interface LlmProvidersBackup {
 }
 
 /** Decision model provider type */
-export type DecisionModelType = 'custom' | 'jev' | 'cloudflare-clef'
+export type DecisionModelType =
+  | 'custom'
+  | 'jev'
+  | 'jev-local'
+  | 'ollama-qwen'
+  | 'ollama-llama'
+  | 'cloudflare-clef'
 
 /**
  * Configuration for Decision Models (System One API: Jev, Clef, Custom Decision API)

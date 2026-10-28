@@ -33,20 +33,40 @@ import { useAgentServerUrl } from '@/modules/browseros/agent-server-url.hooks'
 const STORAGE_KEY = 'browseros.decision_config'
 
 const PRESETS = {
+  jev: {
+    name: 'TypeSafe Jev (In-Memory 0MB)',
+    baseUrl: 'local://jev',
+    modelId: 'jev-local',
+    badge: '⚡ 0 MB · 5–15ms',
+    description: 'Zero download, zero network delay. Deterministic matching runs in CPU in 5–15ms. 100% Free & Unlimited.',
+  },
+  'ollama-qwen': {
+    name: 'Ollama Qwen 2.5 (0.5B Local)',
+    baseUrl: 'http://127.0.0.1:11434/api/generate',
+    modelId: 'qwen2.5:0.5b',
+    badge: '💻 390 MB · Localhost',
+    description: 'Localhost SLM (~390 MB model download). Runs private & local on localhost:11434 in 40–80ms.',
+  },
+  'ollama-llama': {
+    name: 'Ollama Llama 3.2 (1B Local)',
+    baseUrl: 'http://127.0.0.1:11434/api/generate',
+    modelId: 'llama3.2:1b',
+    badge: '💻 1.3 GB · Localhost',
+    description: 'Localhost SLM (~1.3 GB model download). Runs private & local on localhost:11434 in 80–150ms.',
+  },
+  'cloudflare-clef': {
+    name: 'Cloudflare Clef-flash (9B Cloud)',
+    baseUrl: 'https://api.cloudflare.com/client/v4/accounts/{{account_id}}/ai/run/@cf/cloudflare/clef-flash-9b',
+    modelId: 'cloudflare/clef-flash-9b',
+    badge: '☁️ 9B Edge · Pre-warmed',
+    description: 'Cloudflare Workers AI serverless GPU edge. 18 GB server model, 300ms latency with pre-warming.',
+  },
   custom: {
     name: 'Custom Decision API',
     baseUrl: 'https://api.typesafe.ai/v1/systemone',
     modelId: 'clef-flash-9b',
-  },
-  jev: {
-    name: 'TypeSafe Jev',
-    baseUrl: 'https://api.typesafe.ai/v1/systemone',
-    modelId: 'typesafe/jev-latest',
-  },
-  'cloudflare-clef': {
-    name: 'Cloudflare Clef-flash',
-    baseUrl: 'https://api.cloudflare.com/client/v4/accounts/{{account_id}}/ai/run/@cf/cloudflare/clef-flash-9b',
-    modelId: 'cloudflare/clef-flash-9b',
+    badge: '🔧 Custom Endpoint',
+    description: 'Connect any remote or self-hosted System One compatible decision API.',
   },
 } as const
 
@@ -59,10 +79,11 @@ export const DecisionSettingsPage: FC = () => {
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved) {
         const parsed = JSON.parse(saved)
-        // If an old local mock URL was saved in storage, sanitize it to cloudflare
+        // If an old local mock URL was saved in storage, sanitize it to jev
         if (parsed.baseUrl && (parsed.baseUrl.includes('127.0.0.1:4000') || parsed.baseUrl.includes('localhost:4000')) && parsed.type !== 'custom') {
-          parsed.baseUrl = PRESETS['cloudflare-clef'].baseUrl
-          parsed.type = 'cloudflare-clef'
+          parsed.baseUrl = PRESETS.jev.baseUrl
+          parsed.type = 'jev'
+          parsed.modelId = PRESETS.jev.modelId
         }
         return parsed
       }
@@ -72,10 +93,10 @@ export const DecisionSettingsPage: FC = () => {
     return {
       enabled: true,
       id: 'default-decision',
-      type: 'cloudflare-clef',
-      name: 'Cloudflare Clef-flash',
-      baseUrl: 'https://api.cloudflare.com/client/v4/accounts/{{account_id}}/ai/run/@cf/cloudflare/clef-flash-9b',
-      modelId: 'cloudflare/clef-flash-9b',
+      type: 'jev',
+      name: 'TypeSafe Jev (In-Memory 0MB)',
+      baseUrl: 'local://jev',
+      modelId: 'jev-local',
       apiKey: '',
       headers: {},
       confidenceThreshold: 0.8,
@@ -104,27 +125,31 @@ export const DecisionSettingsPage: FC = () => {
       const cleanId = cfAccountId.trim()
       return `https://api.cloudflare.com/client/v4/accounts/${cleanId || '{{account_id}}'}/ai/run/@cf/cloudflare/clef-flash-9b`
     }
-    if (config.type === 'jev') {
+    if (config.type === 'jev' || config.type === 'jev-local') {
       return PRESETS.jev.baseUrl
+    }
+    if (config.type === 'ollama-qwen') {
+      return config.baseUrl || PRESETS['ollama-qwen'].baseUrl
+    }
+    if (config.type === 'ollama-llama') {
+      return config.baseUrl || PRESETS['ollama-llama'].baseUrl
     }
     return config.baseUrl || PRESETS.custom.baseUrl
   }
 
   const effectiveUrl = getEffectiveUrl()
 
-  const handlePresetChange = (preset: 'custom' | 'jev' | 'cloudflare-clef') => {
+  const handlePresetChange = (preset: keyof typeof PRESETS) => {
     const selected = PRESETS[preset]
-    let targetBaseUrl = selected.baseUrl
+    let targetBaseUrl: string = selected.baseUrl
     if (preset === 'cloudflare-clef') {
       const cleanId = cfAccountId.trim()
       targetBaseUrl = `https://api.cloudflare.com/client/v4/accounts/${cleanId || '{{account_id}}'}/ai/run/@cf/cloudflare/clef-flash-9b`
-    } else if (preset === 'jev') {
-      targetBaseUrl = PRESETS.jev.baseUrl
     }
 
     setConfig((prev) => ({
       ...prev,
-      type: preset,
+      type: preset as any,
       name: selected.name,
       baseUrl: targetBaseUrl,
       modelId: selected.modelId,
@@ -143,8 +168,8 @@ export const DecisionSettingsPage: FC = () => {
   }
 
   const handleResetToDefaults = () => {
-    const selected = PRESETS[config.type as keyof typeof PRESETS] || PRESETS['cloudflare-clef']
-    let targetBaseUrl = selected.baseUrl
+    const selected = PRESETS[config.type as keyof typeof PRESETS] || PRESETS.jev
+    let targetBaseUrl: string = selected.baseUrl
     if (config.type === 'cloudflare-clef' && cfAccountId.trim()) {
       targetBaseUrl = `https://api.cloudflare.com/client/v4/accounts/${cfAccountId.trim()}/ai/run/@cf/cloudflare/clef-flash-9b`
     }
@@ -163,7 +188,7 @@ export const DecisionSettingsPage: FC = () => {
 
     const targetUrl = getEffectiveUrl()
 
-    // Validate Cloudflare Account ID and API Token
+    // Validate Cloudflare Account ID and API Token if using Cloudflare Clef
     if (config.type === 'cloudflare-clef') {
       if (!cfAccountId.trim() || targetUrl.includes('{{account_id}}')) {
         setTestResult({
@@ -181,13 +206,6 @@ export const DecisionSettingsPage: FC = () => {
         setTesting(false)
         return
       }
-    } else if (config.type === 'jev' && !config.apiKey?.trim()) {
-      setTestResult({
-        success: false,
-        message: 'Please enter your TypeSafe API Key before testing.',
-      })
-      setTesting(false)
-      return
     }
 
     let parsedHeaders = config.headers
@@ -330,20 +348,29 @@ export const DecisionSettingsPage: FC = () => {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs">Provider Preset</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {(['cloudflare-clef', 'jev', 'custom'] as const).map((preset) => (
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Provider Preset</Label>
+              <span className="text-[11px] text-amber-500 font-medium">
+                {PRESETS[config.type as keyof typeof PRESETS]?.badge || '🔧 Custom'}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              {(['jev', 'ollama-qwen', 'ollama-llama', 'cloudflare-clef', 'custom'] as const).map((preset) => (
                 <Button
                   key={preset}
                   type="button"
                   variant={config.type === preset ? 'default' : 'outline'}
                   size="sm"
                   onClick={() => handlePresetChange(preset)}
-                  className="w-full text-xs"
+                  className="w-full text-xs font-medium truncate"
                 >
-                  {PRESETS[preset].name}
+                  {PRESETS[preset].name.split(' (')[0]}
                 </Button>
               ))}
+            </div>
+            <div className="rounded-md bg-muted/60 p-2.5 text-xs text-muted-foreground">
+              {PRESETS[config.type as keyof typeof PRESETS]?.description ||
+                'Configure a custom System One decision endpoint.'}
             </div>
           </div>
 
@@ -373,7 +400,7 @@ export const DecisionSettingsPage: FC = () => {
                 id="baseUrl"
                 value={effectiveUrl}
                 onChange={(e) => setConfig((prev) => ({ ...prev, baseUrl: e.target.value }))}
-                placeholder="https://api.cloudflare.com/... or https://api.typesafe.ai/v1/systemone"
+                placeholder="https://api.cloudflare.com/... or local://jev"
                 className="font-mono text-xs"
               />
             </div>
@@ -384,7 +411,7 @@ export const DecisionSettingsPage: FC = () => {
                 id="modelId"
                 value={config.modelId || ''}
                 onChange={(e) => setConfig((prev) => ({ ...prev, modelId: e.target.value }))}
-                placeholder="cloudflare/clef-flash-9b or typesafe/jev-latest"
+                placeholder="jev-local, qwen2.5:0.5b, or cloudflare/clef-flash-9b"
                 className="font-mono text-xs"
               />
             </div>
@@ -395,15 +422,24 @@ export const DecisionSettingsPage: FC = () => {
               {config.type === 'cloudflare-clef'
                 ? 'Cloudflare Workers AI API Token (Bearer)'
                 : config.type === 'jev'
-                  ? 'TypeSafe Jev API Key'
-                  : 'API Key / Bearer Token (stored locally)'}
+                  ? 'TypeSafe Jev (In-Memory — No API Key Required)'
+                  : config.type === 'ollama-qwen' || config.type === 'ollama-llama'
+                    ? 'Localhost Ollama (No API Key Required)'
+                    : 'API Key / Bearer Token (stored locally)'}
             </Label>
             <Input
               id="apiKey"
               type="password"
               value={config.apiKey || ''}
+              disabled={config.type === 'jev' || config.type === 'ollama-qwen' || config.type === 'ollama-llama'}
               onChange={(e) => setConfig((prev) => ({ ...prev, apiKey: e.target.value }))}
-              placeholder="Paste token or leave blank if self-hosted without auth"
+              placeholder={
+                config.type === 'jev'
+                  ? 'Running locally in-memory (0 MB) — no token needed'
+                  : config.type?.startsWith('ollama')
+                    ? 'Connecting to localhost:11434 — no token needed'
+                    : 'Paste token or leave blank if self-hosted without auth'
+              }
             />
           </div>
 

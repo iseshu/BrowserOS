@@ -12,12 +12,18 @@ import { HEADER_NAME_PATTERN, HEADER_VALUE_PATTERN } from './llm'
 export const DECISION_PROVIDERS = {
   CUSTOM: 'custom',
   JEV: 'jev',
+  JEV_LOCAL: 'jev-local',
+  OLLAMA_QWEN: 'ollama-qwen',
+  OLLAMA_LLAMA: 'ollama-llama',
   CLOUDFLARE_CLEF: 'cloudflare-clef',
 } as const
 
 export const DecisionProviderSchema = z.enum([
   DECISION_PROVIDERS.CUSTOM,
   DECISION_PROVIDERS.JEV,
+  DECISION_PROVIDERS.JEV_LOCAL,
+  DECISION_PROVIDERS.OLLAMA_QWEN,
+  DECISION_PROVIDERS.OLLAMA_LLAMA,
   DECISION_PROVIDERS.CLOUDFLARE_CLEF,
 ])
 

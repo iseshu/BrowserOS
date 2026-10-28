@@ -140,6 +140,54 @@ describe('DecisionClient', () => {
     const client = new DecisionClient({ fetchFn: mockFetch })
     await expect(client.decideChoice('state', ['a', 'b'])).rejects.toThrow('Decision API error (401 Unauthorized)')
   })
+
+  it('executes in-memory zero-weight decision with jev-local without network call', async () => {
+    let networkCalled = false
+    const mockFetch = (async () => {
+      networkCalled = true
+      return new Response('{}')
+    }) as unknown as typeof fetch
+
+    const client = new DecisionClient({
+      provider: 'jev-local',
+      fetchFn: mockFetch,
+    })
+
+    const state = `[e1] button "Submit Order"\n[e2] input "Search query"\n[e3] link "Privacy Policy"`
+    const choice = await client.decideChoice(state, ['e1', 'e2', 'e3'], 'Click the Submit Order button')
+
+    expect(networkCalled).toBe(false)
+    expect(choice.value).toBe('e1')
+    expect(choice.confidence).toBeGreaterThanOrEqual(0.75)
+  })
+
+  it('executes decision with local Ollama format when baseUrl is 11434', async () => {
+    let capturedBody: any = null
+    const mockFetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      capturedBody = JSON.parse(init?.body as string)
+      return new Response(
+        JSON.stringify({
+          response: JSON.stringify({ choice: 'btn_save' }),
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      )
+    }) as unknown as typeof fetch
+
+    const client = new DecisionClient({
+      provider: 'ollama',
+      baseUrl: 'http://127.0.0.1:11434/api/generate',
+      model: 'qwen2.5:0.5b',
+      fetchFn: mockFetch,
+    })
+
+    const choice = await client.decideChoice('Page state...', ['btn_cancel', 'btn_save'], 'Click the Save button')
+
+    expect(capturedBody).toBeDefined()
+    expect(capturedBody.model).toBe('qwen2.5:0.5b')
+    expect(capturedBody.format).toBe('json')
+    expect(capturedBody.keep_alive).toBe('1h')
+    expect(choice.value).toBe('btn_save')
+  })
 })
 
 describe('testDecisionProviderConnection', () => {

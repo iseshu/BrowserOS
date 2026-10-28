@@ -75,7 +75,10 @@ export function getToolEngineInfo(tool: ToolInvocationInfo): {
     if (saved) {
       const parsed = JSON.parse(saved)
       isDecisionConfigEnabled = parsed.enabled !== false
-      if (parsed.type === 'jev') decisionModelName = 'Jev'
+      if (parsed.type === 'jev' || parsed.type === 'jev-local') decisionModelName = 'Jev'
+      else if (parsed.type === 'ollama-qwen' || parsed.modelId?.includes('qwen')) decisionModelName = 'Ollama-Qwen'
+      else if (parsed.type === 'ollama-llama' || parsed.modelId?.includes('llama')) decisionModelName = 'Ollama-Llama'
+      else if (parsed.type?.startsWith('ollama')) decisionModelName = 'Ollama'
       else if (parsed.modelId) decisionModelName = parsed.modelId.replace('@cf/cloudflare/', '').replace('cloudflare/', '')
     }
   } catch {

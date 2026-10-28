@@ -98,6 +98,10 @@ export const act = defineTool({
         .describe(
           'Execution engine: "decision-model" (fast System One) or "llm" (LLM planner).',
         ),
+      model: z
+        .string()
+        .optional()
+        .describe('Model identifier for tracking decision latency and badge rendering.'),
       ref: z.string().optional().describe('Target element ref, e.g. "e12".'),
       text: z.string().optional().describe('Text for kind=type.'),
       value: z.string().optional().describe('Value for kind=fill/select.'),
@@ -144,6 +148,10 @@ export const act = defineTool({
   },
   handler: async (args, ctx, response) => {
     const input = ctx.session.input(args.page)
+    const isDecisionAction =
+      args.engine === 'decision-model' || Boolean(args.actions && args.actions.length > 0)
+    const defaultDiff = isDecisionAction ? 'summary' : 'full'
+    const detail = resolveDiffDetail(args.diff ?? defaultDiff)
 
     if (args.actions && args.actions.length > 0) {
       const executed: string[] = []
@@ -151,7 +159,6 @@ export const act = defineTool({
         const step = args.actions[i] as ActArgs
         const err = await runKind(step, input)
         if (err) {
-          const detail = resolveDiffDetail(args.diff)
           if (detail !== 'none') {
             response.includeDiff(args.page, { includeStructured: true, detail })
           }
@@ -165,14 +172,14 @@ export const act = defineTool({
       }
 
       const engine = args.engine ?? 'decision-model'
-      response.data({ kinds: executed, count: executed.length, engine, model: 'clef-flash-9b' })
-      const detail = resolveDiffDetail(args.diff)
+      const model = args.model ?? 'clef-flash-9b'
+      response.data({ kinds: executed, count: executed.length, engine, model })
       if (detail !== 'none') {
         response.includeDiff(args.page, { includeStructured: true, detail })
       }
       return textResult(
         `ok (batch ${executed.length} actions: ${executed.join(', ')})`,
-        { kinds: executed, count: executed.length, engine, model: 'clef-flash-9b' },
+        { kinds: executed, count: executed.length, engine, model },
       )
     }
 
@@ -185,7 +192,6 @@ export const act = defineTool({
 
     const engine = args.engine ?? 'llm'
     response.data({ kind: args.kind, engine })
-    const detail = resolveDiffDetail(args.diff)
     if (detail !== 'none') {
       response.includeDiff(args.page, { includeStructured: true, detail })
     }

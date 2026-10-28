@@ -141,7 +141,7 @@ export type ReasoningTriggerProps = ComponentProps<typeof CollapsibleTrigger>
 const getThinkingMessage = (isStreaming: boolean, duration?: number, durationMs?: number, liveElapsedMs?: number) => {
   if (isStreaming) {
     const elapsedText = liveElapsedMs && liveElapsedMs > 0 ? ` (${formatLatency(liveElapsedMs)})` : ''
-    return <Shimmer duration={1}>Thinking{elapsedText}...</Shimmer>
+    return <Shimmer duration={1}>{`Thinking${elapsedText}...`}</Shimmer>
   }
   if (durationMs !== undefined && durationMs > 0) {
     return <p>Thought for {formatLatency(durationMs)}</p>
