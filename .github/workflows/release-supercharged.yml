@@ -1,0 +1,250 @@
+name: "Release: Supercharged Edition"
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release Tag (e.g. v0.51.3-supercharged)"
+        required: true
+        default: "v0.51.3-supercharged"
+      release_name:
+        description: "Release Title"
+        required: false
+        default: "BrowserOS Supercharged Edition"
+      draft:
+        description: "Publish as draft"
+        type: boolean
+        default: false
+      prerelease:
+        description: "Publish as prerelease"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    name: Build & Package Supercharged Release
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: |
+          cd packages/browseros-agent
+          bun install --no-save || bun install
+
+      - name: Build Extension (Vite / WXT)
+        run: |
+          cd packages/browseros-agent/apps/app
+          export NODE_OPTIONS="--max-old-space-size=4096"
+          bun run build:dev
+
+      - name: Setup Packaging Workspace
+        run: |
+          mkdir -p dist_release/extension
+          mkdir -p dist_release/linux_bundle
+          mkdir -p dist_release/windows_bundle
+          
+          # Copy built extension
+          cp -r packages/browseros-agent/apps/app/dist/chrome-mv3-dev/* dist_release/extension/
+          
+          # Copy icons
+          cp packages/browseros/resources/browseros/icons/linux/product_logo_256.png dist_release/browseros.png
+          cp packages/browseros/resources/browseros/icons/win/chromium.ico dist_release/browseros.ico
+
+      - name: Build Universal Extension Zip
+        run: |
+          cd dist_release/extension
+          zip -r ../browseros-supercharged-extension.zip .
+
+      - name: Build Standalone Linux AppImage
+        run: |
+          # 1. Download base BrowserOS AppImage
+          curl -L -o /tmp/browseros_base.AppImage "https://cdn.browseros.com/releases/browserclaw/0.51.2.3/linux/BrowserOS_neo_v0.51.2.3_x64.AppImage"
+          chmod +x /tmp/browseros_base.AppImage
+          
+          # 2. Extract AppImage
+          cd /tmp && /tmp/browseros_base.AppImage --appimage-extract
+          
+          # 3. Inject Supercharged extension & official icons
+          rm -rf /tmp/squashfs-root/extension
+          cp -r "$GITHUB_WORKSPACE/dist_release/extension" /tmp/squashfs-root/extension
+          cp "$GITHUB_WORKSPACE/dist_release/browseros.png" /tmp/squashfs-root/browseros.png
+          cp "$GITHUB_WORKSPACE/dist_release/browseros.png" /tmp/squashfs-root/browserclaw.png
+          rm -f /tmp/squashfs-root/.DirIcon
+          cp "$GITHUB_WORKSPACE/dist_release/browseros.png" /tmp/squashfs-root/.DirIcon
+          
+          # 4. Inject supercharged AppRun
+          cat << 'EOF' > /tmp/squashfs-root/AppRun
+          #!/bin/sh
+          THIS="$(readlink -f "$0")"
+          HERE="$(dirname "$THIS")"
+          export LD_LIBRARY_PATH="${HERE}/opt/browserclaw${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export CHROME_WRAPPER="$THIS"
+          export CHROME_DESKTOP="browseros.desktop"
+          EXT_DIR="${HERE}/extension"
+          if [ -d "$EXT_DIR" ]; then
+            exec "${HERE}/opt/browserclaw/browserclaw" --class="browseros" --name="browseros" --no-sandbox --load-extension="$EXT_DIR" "$@"
+          else
+            exec "${HERE}/opt/browserclaw/browserclaw" --class="browseros" --name="browseros" --no-sandbox "$@"
+          fi
+          EOF
+          chmod +x /tmp/squashfs-root/AppRun
+          
+          # 5. Download appimagetool and runtime
+          curl -L -o /tmp/appimagetool "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x /tmp/appimagetool
+          curl -L -o /tmp/runtime-x86_64 "https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-x86_64"
+          
+          # 6. Build AppImage
+          export ARCH=x86_64
+          /tmp/appimagetool --runtime-file /tmp/runtime-x86_64 /tmp/squashfs-root "$GITHUB_WORKSPACE/dist_release/BrowserOS-Supercharged-x86_64.AppImage"
+
+      - name: Build Standalone Windows Executable (.exe)
+        run: |
+          # 1. Download Windows official installer
+          curl -L -o /tmp/win_installer.zip "https://github.com/browseros-ai/BrowserOS/releases/download/browserclaw/v0.51.2.4/BrowserOS_neo_v0.51.2.4_x64_installer.zip"
+          mkdir -p /tmp/win_payload
+          unzip -o /tmp/win_installer.zip -d /tmp/win_payload/
+          
+          # 2. Add extension and icons
+          cp -r dist_release/extension /tmp/win_payload/extension
+          cp dist_release/browseros.ico /tmp/win_payload/browseros.ico
+          cp dist_release/browseros.png /tmp/win_payload/browseros.png
+          
+          # 3. Add runner batch script
+          cat << 'EOF' > /tmp/win_payload/run-browseros-windows.bat
+          @echo off
+          setlocal enabledelayedexpansion
+          title BrowserOS Supercharged Edition
+          set SCRIPT_DIR=%~dp0
+          set EXT_DIR=%SCRIPT_DIR%extension
+          set ICON_PATH=%SCRIPT_DIR%browseros.ico
+          set SHORTCUT_PATH=%USERPROFILE%\Desktop\BrowserOS Supercharged.lnk
+          if not exist "%SHORTCUT_PATH%" (
+              powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut('%SHORTCUT_PATH%'); $s.TargetPath = '%~f0'; $s.WorkingDirectory = '%SCRIPT_DIR%'; $s.IconLocation = '%ICON_PATH%, 0'; $s.Description = 'BrowserOS Supercharged'; $s.Save()" >nul 2>&1
+          )
+          set BROWSER_PATH=
+          if exist "%SCRIPT_DIR%BrowserOS.exe" set BROWSER_PATH=%SCRIPT_DIR%BrowserOS.exe
+          if not defined BROWSER_PATH if exist "%LOCALAPPDATA%\Programs\BrowserOS\BrowserOS.exe" set BROWSER_PATH=%LOCALAPPDATA%\Programs\BrowserOS\BrowserOS.exe
+          if not defined BROWSER_PATH if exist "%LOCALAPPDATA%\BrowserOS\BrowserOS.exe" set BROWSER_PATH=%LOCALAPPDATA%\BrowserOS\BrowserOS.exe
+          if not defined BROWSER_PATH if exist "%PROGRAMFILES%\BrowserOS\BrowserOS.exe" set BROWSER_PATH=%PROGRAMFILES%\BrowserOS\BrowserOS.exe
+          if defined BROWSER_PATH (
+              start "" "!BROWSER_PATH!" --load-extension="%EXT_DIR%" %*
+              exit /b 0
+          )
+          if exist "%SCRIPT_DIR%BrowserOS_neo_v0.51.2.4_x64_installer.exe" (
+              start /wait "" "%SCRIPT_DIR%BrowserOS_neo_v0.51.2.4_x64_installer.exe"
+              if exist "%LOCALAPPDATA%\Programs\BrowserOS\BrowserOS.exe" set BROWSER_PATH=%LOCALAPPDATA%\Programs\BrowserOS\BrowserOS.exe
+              if defined BROWSER_PATH (
+                  start "" "!BROWSER_PATH!" --load-extension="%EXT_DIR%" %*
+                  exit /b 0
+              )
+          )
+          if exist "%PROGRAMFILES%\Google\Chrome\Application\chrome.exe" (
+              start "" "%PROGRAMFILES%\Google\Chrome\Application\chrome.exe" --load-extension="%EXT_DIR%" %*
+              exit /b 0
+          )
+          if exist "%PROGRAMFILES(X86)%\Microsoft\Edge\Application\msedge.exe" (
+              start "" "%PROGRAMFILES(X86)%\Microsoft\Edge\Application\msedge.exe" --load-extension="%EXT_DIR%" %*
+              exit /b 0
+          )
+          pause
+          EOF
+
+          # 4. Package Windows 7z payload and concatenate with 7z.sfx
+          mkdir -p /tmp/7z_tools
+          curl -L -o /tmp/7z_tools/7z-linux.tar.xz "https://www.7-zip.org/a/7z2301-linux-x64.tar.xz"
+          tar -xf /tmp/7z_tools/7z-linux.tar.xz -C /tmp/7z_tools/
+          curl -L -o /tmp/7z_tools/7z-win.exe "https://www.7-zip.org/a/7z2301-x64.exe"
+          /tmp/7z_tools/7zz x /tmp/7z_tools/7z-win.exe -o/tmp/7z_tools/win_extracted -y
+          
+          cat << 'EOF' > /tmp/7z_tools/config.txt
+          ;!@Install@!UTF-8!
+          Title="BrowserOS Supercharged Edition"
+          RunProgram="run-browseros-windows.bat"
+          ;!@InstallEnd@!
+          EOF
+          
+          cd /tmp/win_payload && /tmp/7z_tools/7zz a -mx=5 /tmp/7z_tools/win_payload.7z *
+          cat /tmp/7z_tools/win_extracted/7z.sfx /tmp/7z_tools/config.txt /tmp/7z_tools/win_payload.7z > "$GITHUB_WORKSPACE/dist_release/BrowserOS-Supercharged-Setup.exe"
+          
+          # Also create regular zip bundle
+          cd /tmp && zip -r "$GITHUB_WORKSPACE/dist_release/browseros-supercharged-windows.zip" win_payload
+
+      - name: Build Linux Tarball Bundle
+        run: |
+          mkdir -p /tmp/linux_portable
+          # Copy AppDir contents
+          cp -r /tmp/squashfs-root/AppRun /tmp/linux_portable/run.sh
+          cp -r /tmp/squashfs-root/opt/browserclaw/browserclaw /tmp/linux_portable/browseros-bin
+          cp -r dist_release/extension /tmp/linux_portable/extension
+          cp dist_release/browseros.png /tmp/linux_portable/browseros.png
+          cp dist_release/browseros.ico /tmp/linux_portable/browseros.ico
+          cd /tmp && tar -czf "$GITHUB_WORKSPACE/dist_release/browseros-supercharged-linux.tar.gz" linux_portable
+
+      - name: Determine Release Tag & Title
+        id: release_info
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag_name=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+            echo "release_name=${{ github.event.inputs.release_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag_name=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "release_name=BrowserOS Supercharged Edition ${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release_info.outputs.tag_name }}
+          name: ${{ steps.release_info.outputs.release_name }}
+          draft: ${{ github.event.inputs.draft || false }}
+          prerelease: ${{ github.event.inputs.prerelease || false }}
+          files: |
+            dist_release/BrowserOS-Supercharged-Setup.exe
+            dist_release/BrowserOS-Supercharged-x86_64.AppImage
+            dist_release/browseros-supercharged-extension.zip
+            dist_release/browseros-supercharged-windows.zip
+            dist_release/browseros-supercharged-linux.tar.gz
+          body: |
+            ## 🚀 BrowserOS Supercharged Edition
+            
+            ### ⚡ 1-Click Standalone Executables (Recommended)
+            - **🪟 Windows Setup:** [`BrowserOS-Supercharged-Setup.exe`](BrowserOS-Supercharged-Setup.exe) (138 MB)
+            - **🐧 Linux AppImage:** [`BrowserOS-Supercharged-x86_64.AppImage`](BrowserOS-Supercharged-x86_64.AppImage) (217 MB)
+            
+            ### 🌐 Extensions & Archives
+            - **Chrome / Edge / Brave / Arc Extension:** [`browseros-supercharged-extension.zip`](browseros-supercharged-extension.zip) (6.6 MB)
+            - **Windows Archive:** [`browseros-supercharged-windows.zip`](browseros-supercharged-windows.zip)
+            - **Linux Tarball:** [`browseros-supercharged-linux.tar.gz`](browseros-supercharged-linux.tar.gz)
+            
+            ### ✨ Included Enhancements
+            1. **Dual-Engine Fast Path:** 15–50ms deterministic micro-actions via Decision Models.
+            2. **Live "While Doing" Visualizer:** Engine status badge and progress indicator on every interaction.
+            3. **Token & Cost Savings Dashboard:** Accessible at `/settings/savings`.
+            4. **Live Element Spotlight & Ghost Cursor:** Amber/cyan glow bounding box and smooth cursor tracking.
+            5. **Autonomous Cookie & GDPR Blaster:** Skips consent overlays on navigation.
+            6. **1-Click Playwright Exporter:** Generates clean TypeScript scripts.
+            7. **Self-Healing DOM Engine:** Auto-scrolls detached nodes into view.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
